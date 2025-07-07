@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Admin Account</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Poppins', sans-serif;
+      background: #f4f7fc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .container {
+      max-width: 400px;
+      background: white;
+      padding: 2rem;
+      border-radius: 1rem;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    img {
+      width: 100px;
+      margin-left: 1.5rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      color: #082f84;
+      margin-bottom: 1.5rem;
+    }
+    input[type="text"], input[type="email"], input[type="password"] {
+      width: 100%;
+      padding: 0.6rem;
+      margin: 0.5rem 0;
+      border-radius: 0.5rem;
+      border: 1px solid #ccc;
+    }
+    button {
+      width: 100%;
+      padding: 0.7rem;
+      border: none;
+      border-radius: 2rem;
+      font-weight: bold;
+      color: white;
+      background-color: #082f84;
+      cursor: pointer;
+      margin-top: 1rem;
+    }
+    button:hover {
+      background-color: #061d5c;
+    }
+    p {
+      margin-top: 1rem;
+    }
+    a {
+      color: #082f84;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="{{ url_for('static', filename='AcciTrack-Logo.png') }}" alt="Logo">
+    <h1>Create Admin Account</h1>
+    <input type="text" id="username" placeholder="Username" required />
+    <input type="email" id="email" placeholder="Email Address" required />
+    <input type="password" id="password" placeholder="Password" required />
+    <input type="password" id="confirmPassword" placeholder="Confirm Password" required />
+    <input type="text" id="accessCode" placeholder="Admin Access Code" required />
+    <button onclick="createAccount()">Create Account</button>
+    <p>Already have an account? <a href="/">Login</a></p>
+  </div>
+
+  <script>
+    async function createAccount() {
+      const username = document.getElementById("username").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const confirmPassword = document.getElementById("confirmPassword").value;
+      const accessCode = document.getElementById("accessCode").value.trim();
+
+      if (password !== confirmPassword) {
+        alert("Passwords do not match!");
+        return;
+      }
+
+      if (!accessCode) {
+        alert("Admin access code is required.");
+        return;
+      }
+
+      try {
+        const response = await fetch("/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            username,
+            email,
+            password,
+            access_code: accessCode
+          })
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+          alert("Signup successful! You can now log in.");
+          window.location.href = "/";
+        } else {
+          alert(result.error || "Signup failed.");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Server error. Please try again.");
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AcciTrack Dashboard</title>
+
+  <!-- Leaflet CSS for Baguio map -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-sA+e2coHG0k+y1+gUtwLZkdJROf3zO/IaWzF3LrA0uE="
+    crossorigin=""
+  />
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      margin: 0;
+      display: flex;
+      background: #f4f7fc;
+    }
+    .sidebar {
+      width: 220px;
+      background: #d8e3f7;
+      padding: 20px;
+    }
+    .sidebar a {
+      display: block;
+      color: #1a2e79;
+      text-decoration: none;
+      margin: 15px 0;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .sidebar a:hover {
+      background: #1E3A8A;
+      color: white;
+    }
+    .main {
+      flex: 1;
+      padding: 20px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #ffffff;
+      padding: 15px 30px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header h1 {
+      font-size: 24px;
+      color: #333;
+    }
+    .content {
+      display: flex;
+      margin-top: 20px;
+    }
+    .stats {
+      flex: 1;
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      margin-right: 20px;
+    }
+    .reports {
+      flex: 2;
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .map {
+      width: 100%;
+      height: 300px;
+      border-radius: 8px;
+      margin-top: 20px;
+    }
+    .weather {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #e0f7fa;
+      border-left: 5px solid #00796b;
+    }
+    .predict-btn {
+      padding: 10px 20px;
+      background-color: #f97316;
+      border: none;
+      border-radius: 5px;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .predict-btn:hover {
+      background-color: #ea6b12;
+    }
+    #predict-section {
+      margin-top: 30px;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    select, input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0 15px 0;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    label {
+      font-weight: 600;
+    }
+    .logo-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .logo-small {
+      width: 100px;
+      height: auto;
+    }
+    #predictionResult {
+      font-weight: bold;
+      color: #00796b;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="sidebar">
+    <div class="logo-title">
+      <img src="{{ url_for('static', filename='AcciTrack-Logo.png') }}" alt="logo" class="logo-small">
+    </div>
+    <a href="/admin_dashboard">Dashboard</a>
+    <a href="/reports">Reports</a>
+    <a href="/history">History</a>
+    <a href="admin_profile">Profile</a>
+    <a href="/users">Manage Users</a>
+    <a href="/logout">Log Out</a>
+  </div>
+
+  <div class="main">
+    <div class="header">
+      <h1>Welcome, Admin!</h1>
+      <div>
+        <button class="predict-btn" onclick="togglePredict()">Predict</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="stats">
+        <h2>System Overview</h2>
+        <p>Total Predictions: {{ total }}</p>
+        <p>High Risk: {{ high }}</p>
+        <p>Low Risk: {{ low }}</p>
+      </div>
+
+      <div class="reports">
+        <h2>Recent Reports</h2>
+        <p>Summary of latest incidents</p>
+        <div class="map" id="baguioMap"></div>
+      </div>
+    </div>
+
+    <div class="weather">
+      <h2>Weather Monitor</h2>
+      <p>System is monitoring weather-based risk conditions.</p>
+    </div>
+
+    <!-- Prediction Section -->
+    <div id="predict-section" style="display: none;">
+      <h2>Run Prediction</h2>
+      <label>Weather:</label>
+      <select id="weather">
+        <option value="clear">Clear</option>
+        <option value="rainy">Rainy</option>
+        <option value="foggy">Foggy</option>
+      </select>
+
+      <label>Road Conditions:</label>
+      <select id="road_conditions">
+        <option value="dry">Dry</option>
+        <option value="wet">Wet</option>
+        <option value="damp">Damp</option>
+      </select>
+
+      <label>Time Committed (12-hour format):</label>
+      <input type="text" id="time_committed" placeholder="e.g. 2:30:46 PM" required />
+
+      <label>Location:</label>
+      <select id="location" required></select>
+
+      <label>Day of Week:</label>
+      <select id="day_of_week">
+        <option value="0">Monday</option>
+        <option value="1">Tuesday</option>
+        <option value="2">Wednesday</option>
+        <option value="3">Thursday</option>
+        <option value="4">Friday</option>
+        <option value="5">Saturday</option>
+        <option value="6">Sunday</option>
+      </select>
+
+      <label>Victim Unharmed:</label>
+      <select id="victim_unharmed">
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+      </select>
+
+      <button onclick="predictAccident()" class="predict-btn">Submit Prediction</button>
+      <p id="predictionResult"></p>
+    </div>
+  </div>
+
+<!-- Leaflet JS for map -->
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-o9N1jRQk7d4bgfYv4LCEj50iXkD0NWkZ91kn9i1hb8k="
+  crossorigin=""
+></script>
+
+<script>
+  function togglePredict() {
+    const section = document.getElementById("predict-section");
+    section.style.display = section.style.display === "none" ? "block" : "none";
+  }
+
+  async function populateDropdown(id, endpoint) {
+    try {
+      const res = await fetch(endpoint);
+      const data = await res.json();
+      const select = document.getElementById(id);
+      data.forEach(value => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.text = value;
+        select.appendChild(option);
+      });
+    } catch (error) {
+      console.error("Failed to load options:", error);
+    }
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+    populateDropdown("location", "/api/locations");
+
+    // Autofill 12-hour format time
+    const now = new Date();
+    let hours = now.getHours();
+    let minutes = String(now.getMinutes()).padStart(2, '0');
+    let seconds = String(now.getSeconds()).padStart(2, '0');
+    let ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    const timeStr = `${hours}:${minutes}:${seconds} ${ampm}`;
+    document.getElementById("time_committed").value = timeStr;
+
+    // Initialize Baguio Map
+    const map = L.map('baguioMap').setView([16.4023, 120.5960], 13); // Baguio coordinates
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+
+    L.marker([16.4138, 120.5950])
+      .addTo(map)
+      .bindPopup("Baguio City Hall")
+      .openPopup();
+  });
+
+  function predictAccident() {
+    const rawTime = document.getElementById("time_committed").value.trim();
+    const [timePart, modifier] = rawTime.split(" ");
+    const [h, m, s] = timePart.split(":").map(Number);
+    let hour = h;
+    if (modifier === "PM" && hour !== 12) hour += 12;
+    if (modifier === "AM" && hour === 12) hour = 0;
+    const hourStr = String(hour).padStart(2, '0');
+
+    const data = {
+      weather: document.getElementById("weather").value.toLowerCase(),
+      road_conditions: document.getElementById("road_conditions").value.toLowerCase(),
+      time: hourStr,
+      location: document.getElementById("location").value.toLowerCase(),
+      day_of_week: document.getElementById("day_of_week").value,
+      victim_unharmed: document.getElementById("victim_unharmed").value.toLowerCase()
+    };
+
+    fetch("/predict", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    })
+    .then(res => res.json())
+    .then(result => {
+      if (result.error) {
+        document.getElementById("predictionResult").innerText = "Error: " + result.error;
+      } else {
+        document.getElementById("predictionResult").innerText =
+          `Prediction: ${result.message} (${(result.confidence * 100).toFixed(2)}%) at ${data.location}, around ${data.time}:00`;
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Prediction failed. Please try again.");
+    });
+  }
+</script>
+
+<script>
+  const baguioMap = L.map('baguioMap').setView([16.4023, 120.5960], 13);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(baguioMap);
+
+  fetch('/api/accident-locations')
+    .then(res => res.json())
+    .then(data => {
+      data.forEach(entry => {
+        const { location_name, latitude, longitude, risk_label } = entry;
+        const marker = L.marker([latitude, longitude]).addTo(baguioMap);
+        marker.bindPopup(`<strong>${location_name}</strong><br>Risk: ${risk_label}`);
+      });
+    })
+    .catch(err => console.error('Error loading accident markers:', err));
+</script>
+
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AcciTrack</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Poppins', sans-serif;
+      background: url('map-bg.png') no-repeat center center fixed;
+      background-size: cover;
+    }
+    .container {
+      max-width: 350px;
+      margin: 5% auto;
+      background: white;
+      padding: 2rem;
+      border-radius: 1rem;
+      text-align: center;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .logo {
+      width: 250px;
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      color: #082f84;
+      margin-bottom: 1.5rem;
+    }
+    .p {
+      font-size: 0.2rem;
+    }
+    input[type="email"], input[type="password"] {
+      width: 100%;
+      padding: 0.6rem;
+      margin: 0.5rem 0;
+      border-radius: 0.5rem;
+      border: 1px solid #ccc;
+    }
+    .actions {
+      justify-content: space-between;
+      font-size: 0.8rem;
+      margin-bottom: 1rem;
+      text-align: right;
+    }
+    button {
+      width: 100%;
+      padding: 0.7rem;
+      border: none;
+      border-radius: 2rem;
+      font-weight: bold;
+      color: white;
+      margin-top: 0.5rem;
+      cursor: pointer;
+    }
+    .login-btn {
+      background-color: #1E3A8A;
+    }
+    .create-btn {
+      background-color: #1E3A8A;
+    }
+    .center-text {
+      text-align: center;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="{{ url_for('static', filename='AcciTrack-Logo.png') }}" alt="AcciTrack Logo" class="logo">
+    <h1>Predictive and Reporting System</h1>
+
+    <input type="email" id="email" placeholder="Email Address" required />
+    <input type="password" id="password" placeholder="Password" required />
+
+    <div class="actions">
+      <a href="#">Forgot password?</a>
+    </div>
+
+    <button class="login-btn" onclick="loginUser()">Login</button>
+    <div class="center-text">
+      <p>Don't have an account? <a href="#" onclick="checkAdminAccess()">Signup</a></p>
+    </div>
+  </div>
+
+  <script>
+  function loginUser() {
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+
+    // Basic email format check
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email)) {
+      alert("Please enter a valid email address.");
+      return;
+    }
+
+    fetch("/login", {
+      method: "POST",
+      credentials: "include",  
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email, password })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.role === "admin") {
+        window.location.href = "/admin_dashboard";
+      } else if (data.role === "user") {
+        window.location.href = "/user_dashboard";
+      } else {
+        alert(data.error || "Login failed.");
+      }
+    })
+    .catch(err => {
+      console.error("Login request failed:", err);
+      alert("Server error during login.");
+    });
+  }
+</script>
+<script>
+  function checkAdminAccess() {
+  const code = prompt("Enter admin access code:");
+  if (code === null) return; 
+  fetch("/verify_admin_code", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include", 
+    body: JSON.stringify({ code: code })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.allowed) {
+      window.location.href = "/signup";
+    } else {
+      alert("Incorrect access code.");
+    }
+  })
+  .catch(err => {
+    console.error("Admin code verification failed:", err);
+    alert("Server error.");
+  });
+}
+</script>
+
+</body>
+</html>
