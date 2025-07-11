@@ -1,0 +1,51 @@
+MYSQL-DESIGN2
+
+DATABASE - acci_track
+
+
+CREATE TABLE detection (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    accident_type VARCHAR(50),
+    temperature DECIMAL(5,2),
+    humidity DECIMAL(5,2),
+    time_of_day TIME,
+    weather ENUM('Rainy', 'Not Rainy'),
+    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+
+
+CREATE TABLE locations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    location_name VARCHAR(255),
+    latitude DECIMAL(9,6),
+    longitude DECIMAL(9,6)
+);
+
+
+
+CREATE TABLE prediction_results (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    weather VARCHAR(50),
+    road_conditions VARCHAR(50),
+    location VARCHAR(100),
+    hour INT,
+    day_of_week INT,
+    victim_unharmed INT,
+    prediction INT,
+    confidence FLOAT,
+    risk_label VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50),
+    email VARCHAR(50),
+    password VARCHAR(255),
+    role ENUM('admin', 'user'),
+    is_blocked TINYINT(1) DEFAULT 0,
+    status ENUM('active', 'blocked') DEFAULT 'active'
+);
