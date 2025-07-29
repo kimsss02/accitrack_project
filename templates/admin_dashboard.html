@@ -76,11 +76,13 @@
       padding: 20px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
-    .map {
+    #heatmap {
       width: 100%;
-      height: 300px;
+      height: 500px;
+      margin: 0;
+      padding: 0;
       border-radius: 8px;
-      margin-top: 20px;
+
     }
     .weather {
       margin-top: 20px;
@@ -163,12 +165,69 @@
         <p>Total Predictions: {{ total }}</p>
         <p>High Risk: {{ high }}</p>
         <p>Low Risk: {{ low }}</p>
+
+        {% if latest %}
+          <hr>
+          <h3>Today's Latest Prediction</h3>
+          <p><strong>Location:</strong> {{ latest.location }}</p>
+          <p><strong>Weather:</strong> {{ latest.weather }}</p>
+          <p><strong>Road:</strong> {{ latest.road_conditions }}</p>
+          <p><strong>Hour:</strong> {{ latest.formatted_hour }}</p>
+          <p><strong>Risk:</strong> {{ latest.risk_label }}</p>
+          <p><strong>Confidence:</strong> {{ (latest.confidence * 100)|round(2) }}%</p>
+          <p><strong>Time:</strong> {{ latest.created_at }}</p>
+        {% else %}
+          <p><em>No predictions made today.</em></p>
+        {% endif %}
+
+        {% if safety_tips %}
+          <div id="safetyTips" style="margin-top: 20px; font-weight: 500; color: #374151;">
+            <h3>🚧 Safety Tips Based on Latest Prediction:</h3>
+            <p>{{ safety_tips }}</p>
+          </div>
+        {% endif %}
       </div>
 
+
       <div class="reports">
-        <h2>Recent Reports</h2>
-        <p>Summary of latest incidents</p>
+        <h2>Reports</h2>
+        <p>Accident Location</p>
         <div class="map" id="baguioMap"></div>
+        <div id="heatmap" style="height: 500px; width: 100%; margin-top: 20px;"></div>
+
+        <!-- Leaflet CSS and JS -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+        <script>
+          // Initialize Map
+          const map = L.map('heatmap').setView([16.4023, 120.5960], 13); // Baguio default
+
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+          }).addTo(map);
+
+          // Load data from Flask
+          fetch("/api/heatmap-data")
+            .then((res) => res.json())
+            .then((data) => {
+              data.forEach((loc) => {
+                let color;
+                if (loc.risk_level === "High") color = "red";
+                else if (loc.risk_level === "Moderate") color = "orange";
+                else color = "green";
+
+                L.circleMarker([loc.latitude, loc.longitude], {
+                  radius: 10,
+                  color: color,
+                  fillColor: color,
+                  fillOpacity: 0.6
+                })
+                .bindPopup(`<strong>${loc.location_name}</strong><br>Risk: ${loc.risk_level}`)
+                .addTo(map);
+              });
+            });
+        </script>
       </div>
     </div>
 
@@ -263,19 +322,153 @@
     hours = hours % 12 || 12;
     const timeStr = `${hours}:${minutes}:${seconds} ${ampm}`;
     document.getElementById("time_committed").value = timeStr;
+  });
 
-    // Initialize Baguio Map
-    const map = L.map('baguioMap').setView([16.4023, 120.5960], 13); // Baguio coordinates
+  function predictAccident() {
+  const rawTime = document.getElementById("time_committed").value.trim();
+  const [timePart, modifier] = rawTime.split(" ");
+  const [h, m, s] = timePart.split(":").map(Number);
+  let hour = h;
+  if (modifier === "PM" && hour !== 12) hour += 12;
+  if (modifier === "AM" && hour === 12) hour = 0;
+  const hourStr = String(hour).padStart(2, '0');
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+  const data = {
+    weather: document.getElementById("weather").value.toLowerCase(),
+    road_conditions: document.getElementById("road_conditions").value.toLowerCase(),
+    time: hourStr,
+    location: document.getElementById("location").value.toLowerCase(),
+    day_of_week: document.getElementById("day_of_week").value,
+    victim_unharmed: document.getElementById("victim_unharmed").value.toLowerCase()
+  };
+
+  fetch("/predict", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  })
+  .then(res => res.json())
+  .then(result => {
+    if (result.error) {
+      document.getElementById("predictionResult").innerText = "Error: " + result.error;
+    } else {
+      document.getElementById("predictionResult").innerText =
+        `Prediction: ${result.message} (${(result.confidence * 100).toFixed(2)}%) at ${data.location}, around ${data.time}:00`;
+
+      // Plot marker on the map
+      if (result.lat && result.lon) {
+        const latestIcon = L.icon({
+          iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', 
+          iconSize: [32, 32],
+          iconAnchor: [16, 32],
+          popupAnchor: [0, -32]
+        });
+
+        const latestMarker = L.marker([result.lat, result.lon], { icon: latestIcon })
+          .addTo(baguioMap)
+          .bindPopup(`<strong>${result.location}</strong><br>${result.message} (${(result.confidence * 100).toFixed(2)}%)`)
+          .openPopup();
+
+        // Center map to predicted location
+        baguioMap.setView([result.lat, result.lon], 14);
+      }
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    alert("Prediction failed. Please try again.");
+  });
+  // Show safety tips
+  const tips = getSafetyTips(data.weather, data.road_conditions, data.day_of_week);
+  document.getElementById("safetyTips").innerHTML = `<h3>Safety Tips:</h3><ul>${tips.map(tip => `<li>${tip}</li>`).join('')}</ul>`;
+}
+</script>
+
+<!-- Updated Script Section at Bottom -->
+<script>
+  let baguioMap;
+  let predictionMarker = null;
+
+  function togglePredict() {
+    const section = document.getElementById("predict-section");
+    section.style.display = section.style.display === "none" ? "block" : "none";
+  }
+
+  async function populateDropdown(id, endpoint) {
+    try {
+      const res = await fetch(endpoint);
+      const data = await res.json();
+      const select = document.getElementById(id);
+      data.forEach(value => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.text = value;
+        select.appendChild(option);
+      });
+    } catch (error) {
+      console.error("Failed to load options:", error);
+    }
+  }
+
+  function getSafetyTips(weather, road, day) {
+  const tips = [];
+
+  // Weather-based tips
+  if (weather === "rainy") {
+    tips.push("Drive slower than usual to avoid hydroplaning.");
+    tips.push("Turn on headlights to improve visibility.");
+  } else if (weather === "foggy") {
+    tips.push("Use fog lights or low beams.");
+    tips.push("Avoid overtaking in low visibility.");
+  } else {
+    tips.push("Maintain normal driving speed and stay alert.");
+  }
+
+  // Road-based tips
+  if (road === "wet" || road === "damp") {
+    tips.push("Allow extra distance for braking.");
+    tips.push("Avoid sudden turns or stops.");
+  }
+
+  // Day-specific tip
+  if (day == 5 || day == 6) {
+    tips.push("Weekend traffic might be heavier. Plan ahead.");
+  } else if (day == 0) {
+    tips.push("Drive cautiously. Monday rush hours can be stressful.");
+  } else {
+    tips.push("Maintain steady speed and observe traffic rules.");
+  }
+
+  return tips;
+}
+
+  window.addEventListener("DOMContentLoaded", () => {
+    populateDropdown("location", "/api/locations");
+
+    const now = new Date();
+    let hours = now.getHours();
+    let minutes = String(now.getMinutes()).padStart(2, '0');
+    let seconds = String(now.getSeconds()).padStart(2, '0');
+    let ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    const timeStr = `${hours}:${minutes}:${seconds} ${ampm}`;
+    document.getElementById("time_committed").value = timeStr;
 
 
-    L.marker([16.4138, 120.5950])
-      .addTo(map)
-      .bindPopup("Baguio City Hall")
-      .openPopup();
+    // Load initial markers from API
+    fetch('/api/accident-locations')
+      .then(res => res.json())
+      .then(data => {
+        data.forEach(entry => {
+          const { location_name, latitude, longitude, risk_label } = entry;
+          const icon = markerIcons[risk_label] || L.Icon.Default;
+          L.marker([latitude, longitude], { icon })
+            .addTo(baguioMap)
+            .bindPopup(`<strong>${location_name}</strong><br>Risk: ${risk_label}`);
+        });
+      })
+      .catch(err => console.error('Error loading accident markers:', err));
   });
 
   function predictAccident() {
@@ -285,6 +478,7 @@
     let hour = h;
     if (modifier === "PM" && hour !== 12) hour += 12;
     if (modifier === "AM" && hour === 12) hour = 0;
+
     const hourStr = String(hour).padStart(2, '0');
 
     const data = {
@@ -306,9 +500,34 @@
     .then(result => {
       if (result.error) {
         document.getElementById("predictionResult").innerText = "Error: " + result.error;
-      } else {
-        document.getElementById("predictionResult").innerText =
-          `Prediction: ${result.message} (${(result.confidence * 100).toFixed(2)}%) at ${data.location}, around ${data.time}:00`;
+        return;
+      }
+
+      document.getElementById("predictionResult").innerText =
+        `Prediction: ${result.message} (${(result.confidence * 100).toFixed(2)}%) at ${result.location}, around ${data.time}:00`;
+
+      if (result.lat && result.lon) {
+        const icon = new L.Icon({
+          iconUrl: result.message === "High Risk"
+            ? "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png"
+            : "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png",
+          shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+          popupAnchor: [1, -34],
+          shadowSize: [41, 41]
+        });
+
+        if (predictionMarker) {
+          baguioMap.removeLayer(predictionMarker);
+        }
+
+        predictionMarker = L.marker([result.lat, result.lon], { icon })
+          .addTo(baguioMap)
+          .bindPopup(`<strong>${result.location}</strong><br>${result.message} (${(result.confidence * 100).toFixed(2)}%)`)
+          .openPopup();
+
+        baguioMap.setView([result.lat, result.lon], 14);
       }
     })
     .catch(err => {
@@ -316,26 +535,27 @@
       alert("Prediction failed. Please try again.");
     });
   }
-</script>
 
-<script>
-  const baguioMap = L.map('baguioMap').setView([16.4023, 120.5960], 13);
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(baguioMap);
-
-  fetch('/api/accident-locations')
-    .then(res => res.json())
-    .then(data => {
-      data.forEach(entry => {
-        const { location_name, latitude, longitude, risk_label } = entry;
-        const marker = L.marker([latitude, longitude]).addTo(baguioMap);
-        marker.bindPopup(`<strong>${location_name}</strong><br>Risk: ${risk_label}`);
-      });
+  const markerIcons = {
+    "High Risk": new L.Icon({
+      iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
+      shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+    }),
+    "Low Risk": new L.Icon({
+      iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png",
+      shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
     })
-    .catch(err => console.error('Error loading accident markers:', err));
+  };
 </script>
+
 
 </body>
 </html>
