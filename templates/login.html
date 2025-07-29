@@ -2,194 +2,123 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Manage Users - AcciTrack Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AcciTrack</title>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
-
-  <!-- Add Bootstrap for Toasts -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-
   <style>
     body {
-      font-family: 'Poppins', sans-serif;
       margin: 0;
-      display: flex;
-      background: #f4f7fc;
+      font-family: 'Poppins', sans-serif;
+      background: url('map-bg.png') no-repeat center center fixed;
+      background-size: cover;
     }
-    .sidebar {
-      width: 220px;
-      background: #d8e3f7;
-      padding: 20px;
-    }
-    .sidebar a {
-      display: block;
-      color: #1a2e79;
-      text-decoration: none;
-      margin: 15px 0;
-      padding: 10px;
-      border-radius: 5px;
-    }
-    .sidebar a:hover {
-      background: #1E3A8A;
-      color: white;
-    }
-    .main {
-      flex: 1;
-      padding: 20px;
-    }
-    .header {
-      background: #ffffff;
-      padding: 15px 30px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      margin-bottom: 20px;
-    }
-    .header h1 {
-      font-size: 24px;
-      color: #333;
-    }
-    .table-container {
+    .container {
+      max-width: 350px;
+      margin: 5% auto;
       background: white;
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      padding: 2rem;
+      border-radius: 1rem;
+      text-align: center;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
-    table {
+    .logo {
+      width: 250px;
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      color: #082f84;
+      margin-bottom: 1.5rem;
+    }
+    .p {
+      font-size: 0.2rem;
+    }
+    input[type="email"], input[type="password"] {
       width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 20px;
-    }
-    th, td {
+      padding: 0.6rem;
+      margin: 0.5rem 0;
+      border-radius: 0.5rem;
       border: 1px solid #ccc;
-      padding: 10px;
-      text-align: left;
     }
-    th {
-      background-color: #e6effc;
-    }
-    input, select {
-      padding: 6px;
-      width: 100%;
-      box-sizing: border-box;
+    .actions {
+      justify-content: space-between;
+      font-size: 0.8rem;
+      margin-bottom: 1rem;
+      text-align: right;
     }
     button {
-      background-color: #1E3A8A;
-      color: white;
+      width: 100%;
+      padding: 0.7rem;
       border: none;
-      padding: 6px 12px;
-      border-radius: 5px;
+      border-radius: 2rem;
+      font-weight: bold;
+      color: white;
+      margin-top: 0.5rem;
       cursor: pointer;
     }
-    button:hover {
-      background-color: #162c5d;
+    .login-btn {
+      background-color: #1E3A8A;
     }
-    .add-user-form input, .add-user-form select {
-      margin: 5px 0;
+    .create-btn {
+      background-color: #1E3A8A;
+    }
+    .center-text {
+      text-align: center;
+      font-size: 0.8rem;
     }
   </style>
 </head>
 <body>
-  <div class="sidebar">
-    <div class="logo-title">
-      <img src="{{ url_for('static', filename='AcciTrack-Logo.png') }}" alt="logo" style="width: 100px;">
+  <div class="container">
+    <img src="{{ url_for('static', filename='AcciTrack-Logo.png') }}" alt="AcciTrack Logo" class="logo">
+    <h1>Predictive and Reporting System</h1>
+
+    <input type="email" id="email" placeholder="Email Address" required />
+    <input type="password" id="password" placeholder="Password" required />
+
+    <div class="actions">
+      <a href="#">Forgot password?</a>
     </div>
-    <a href="/admin_dashboard">Dashboard</a>
-    <a href="/reports">Reports</a>
-    <a href="/history">History</a>
-    <a href="/admin_profile">Profile</a>
-    <a href="/users">Manage Users</a>
-    <a href="/logout">Log Out</a>
+
+    <button class="login-btn" onclick="loginUser()">Login</button>
   </div>
 
-  <div class="main">
-    <div class="header">
-      <h1>Manage Users</h1>
-    </div>
-
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Email</th>
-            <th>Role</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for user in users %}
-          <tr>
-            <form method="POST" action="{{ url_for('update_user', user_id=user.id) }}">
-              <td>{{ user.id }}</td>
-              <td><input type="text" name="email" value="{{ user.email }}"></td>
-              <td>
-                <select name="role">
-                  <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
-                  <option value="user" {% if user.role == 'user' %}selected{% endif %}>User</option>
-                </select>
-              </td>
-              <td>
-                <select name="status">
-                  <option value="active" {% if user.status == 'active' %}selected{% endif %}>Active</option>
-                  <option value="blocked" {% if user.status == 'blocked' %}selected{% endif %}>Blocked</option>
-                </select>
-              </td>
-              <td>
-                <button type="submit">Update</button>
-            </form>
-            <form method="POST" action="{{ url_for('delete_user', user_id=user.id) }}" style="display:inline;">
-              <button type="submit" onclick="return confirm('Are you sure?')">Delete</button>
-            </form>
-              </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-
-      <h3>Add New User</h3>
-      <form method="POST" action="{{ url_for('add_user') }}" class="add-user-form">
-        <input type="text" name="username" placeholder="Username" required>
-        <input type="email" name="email" placeholder="Email" required>
-        <input type="password" name="password" placeholder="Password" required>
-        <select name="role">
-          <option value="user">User</option>
-          <option value="admin">Admin</option>
-        </select>
-        <select name="status">
-          <option value="active">Active</option>
-          <option value="blocked">Blocked</option>
-        </select>
-        <button type="submit">Add User</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- Bootstrap Toast container -->
-  {% if success %}
-  <div class="position-fixed top-0 end-0 p-3" style="z-index: 1050">
-    <div id="successToast" class="toast text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
-      <div class="d-flex">
-        <div class="toast-body">
-          {{ success }}
-        </div>
-        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Bootstrap JS Bundle -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
-  <!-- Show toast on page load -->
-  {% if success %}
   <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      var toastElement = document.getElementById('successToast');
-      var toast = new bootstrap.Toast(toastElement);
-      toast.show();
+  function loginUser() {
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+
+    // Basic email format check
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email)) {
+      alert("Please enter a valid email address.");
+      return;
+    }
+
+    fetch("/login", {
+      method: "POST",
+      credentials: "include",  
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email, password })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.role === "admin") {
+        window.location.href = "/admin_dashboard";
+      } else if (data.role === "user") {
+        window.location.href = "/user_dashboard";
+      } else {
+        alert(data.error || "Login failed.");
+      }
+    })
+    .catch(err => {
+      console.error("Login request failed:", err);
+      alert("Server error during login.");
     });
-  </script>
-  {% endif %}
+  }
+</script>
+
 </body>
 </html>
