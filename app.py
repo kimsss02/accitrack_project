@@ -4,6 +4,37 @@ from werkzeug.security import check_password_hash, generate_password_hash
 import mysql.connector
 from flask_cors import CORS
 
+from datetime import datetime
+
+def generate_safety_tips(weather, road, risk_label):
+    tips = []
+
+    # Risk-level based
+    if risk_label == "High Risk":
+        tips.append("⚠️ High risk detected. Drive cautiously and reduce speed.")
+    else:
+        tips.append("✅ Low risk. Continue practicing safe driving habits.")
+
+    # Weather-specific
+    if weather == "rainy":
+        tips.append("🌧️ It's rainy. Turn on headlights and maintain a safe distance.")
+    elif weather == "foggy":
+        tips.append("🌫️ Fog detected. Use fog lights, and avoid overtaking.")
+    elif weather == "clear":
+        tips.append("☀️ Clear weather. Ideal for travel, but stay alert.")
+
+    # Road condition-specific
+    if road == "wet":
+        tips.append("🛞 Wet roads ahead. Brake gently to avoid skidding.")
+    elif road == "damp":
+        tips.append("💧 Damp roads may still be slippery. Drive with caution.")
+    elif road == "dry":
+        tips.append("🛣️ Dry road. Good traction, but remain within speed limits.")
+
+    return " ".join(tips)
+
+
+
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 app.secret_key = "accitrack_2025_secret_key_for_sessions"
@@ -20,7 +51,9 @@ db = mysql.connector.connect(
     host="localhost",
     user="root",
     password="",
-    database="acci_track"
+    database="acci_track",
+    ssl_disabled=True,  
+    autocommit=True
 )
 cursor = db.cursor(dictionary=True)
 
@@ -85,6 +118,7 @@ def predict():
             if val is None or str(val).strip().lower() in ["", "nan", "none"]:
                 return jsonify({"error": f"Missing or invalid value for field: {field}"}), 400
 
+        # Encode input values
         weather = weather_encoder.transform([data['weather'].strip().lower()])[0]
         road = road_encoder.transform([data['road_conditions'].strip().lower()])[0]
         location = location_encoder.transform([data['location'].strip().lower()])[0]
@@ -98,14 +132,16 @@ def predict():
         hour = int(time_raw)
         day_of_week = int(data['day_of_week'])
 
+        # Prepare features and predict
         features = [[
             weather, road, hour, location, day_of_week,
             time_encoded, victim_unharmed
         ]]
 
-        prob = model.predict_proba(features)[0][1]
+        prob = model.predict_proba(features)[0][1]        
         prediction = model.predict(features)[0]
-        risk_label = "High Risk" if prob >= 0.5 else "Low Risk"
+        confidence = float(prob)                         
+        risk_label = "High Risk" if confidence >= 0.5 else "Low Risk"
 
         # Save prediction result to DB
         cursor.execute("""
@@ -116,25 +152,26 @@ def predict():
             data['weather'],
             data['road_conditions'],
             data['location'],
-            hour, 
+            hour,
             day_of_week,
             victim_unharmed,
             int(prediction),
-            float(round(prob, 2)),
+            confidence,
             risk_label
         ))
         db.commit()
 
+        # Get coordinates from `locations` table (fix column name match)
         cursor.execute("""
-        SELECT latitude, longitude
-        FROM locations
-        WHERE 'Barangay/Location' = %s
-        """, (data['location'],))
+            SELECT latitude, longitude
+            FROM locations
+            WHERE location_name = %s
+        """, (data['location'],))  
         coords = cursor.fetchone() or {'latitude': None, 'longitude': None}
 
         return jsonify({
             "prediction": int(prediction),
-            "confidence": float(round(prob, 2)),
+            "confidence": round(confidence, 2),
             "message": risk_label,
             "location": data['location'],
             "lat": coords['latitude'],
@@ -144,6 +181,7 @@ def predict():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 # ---------------- LOCATION API ----------------
 @app.route('/location_stats')
 def location_stats():
@@ -152,31 +190,37 @@ def location_stats():
 
 @app.route('/api/locations')
 def api_locations():
+    cursor = db.cursor(dictionary=True) 
     cursor.execute("SELECT DISTINCT `Barangay/Location` FROM combined ORDER BY `Barangay/Location`")
     results = cursor.fetchall()
+    cursor.close() 
     return jsonify([row['Barangay/Location'] for row in results])
+
 
 # returns all known locations + their coords
 @app.route('/api/location-coords')
 def api_location_coords():
-    cursor.execute("""
-      SELECT location_name, latitude, longitude
-      FROM locations
-    """)
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT location_name, latitude, longitude FROM locations")
     rows = cursor.fetchall()
+    cursor.close()
     return jsonify(rows)
-    
+
+
+@app.route('/api/heatmap-data')
+def heatmap_data():
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT location_name, latitude, longitude FROM locations WHERE latitude IS NOT NULL AND longitude IS NOT NULL")
+    data = cursor.fetchall()
+    cursor.close()
+    return jsonify(data)
+
+
 
 # ---------------- DASHBOARDS ----------------
 @app.route('/')
 def login_page():
     return render_template('login.html')
-
-@app.route('/signup', methods=['GET'])
-def signup_page():
-    if session.get('role') != 'admin':
-        return "Access denied: Admins only", 403
-    return render_template('signup.html')
 
 
 @app.route('/user_dashboard')
@@ -198,7 +242,39 @@ def user_dashboard():
     user = cursor.fetchone()
     username = user['email'] if user else 'User'
 
-    return render_template('user_dashboard.html', total=total, high=high, low=low, username=username)
+     # Get latest prediction made today
+    cursor.execute("""
+        SELECT weather, road_conditions, location, hour, confidence, risk_label, created_at
+        FROM prediction_results
+        WHERE DATE(created_at) = CURDATE()
+        ORDER BY created_at DESC
+        LIMIT 1
+    """)
+    latest_prediction = cursor.fetchone()
+
+    safety_tips = None
+    if latest_prediction:
+        created_at = latest_prediction["created_at"]
+        
+        # Format hour as 12-hour time with AM/PM
+        formatted_hour = created_at.strftime("%I:%M %p")  
+
+        latest_prediction["formatted_hour"] = formatted_hour
+
+        weather = latest_prediction['weather']
+        road = latest_prediction['road_conditions']
+        risk = latest_prediction['risk_label']
+
+        safety_tips = generate_safety_tips(weather, road, risk)
+    return render_template(
+        'user_dashboard.html',
+        total=total,
+        high=high,
+        low=low,
+        username=username,
+        latest=latest_prediction,
+        safety_tips=safety_tips
+    )
 
 
 @app.route('/admin_dashboard')
@@ -215,7 +291,40 @@ def admin_dashboard():
     cursor.execute("SELECT COUNT(*) AS low FROM prediction_results WHERE risk_label = 'Low Risk'")
     low = cursor.fetchone()['low']
 
-    return render_template('admin_dashboard.html', total=total, high=high, low=low)
+    # Get today's latest prediction with day_of_week
+    cursor.execute("""
+        SELECT weather, road_conditions, location, hour, confidence, risk_label, created_at
+        FROM prediction_results
+        WHERE DATE(created_at) = CURDATE()
+        ORDER BY created_at DESC
+        LIMIT 1
+    """)
+    latest_prediction = cursor.fetchone()
+
+    safety_tips = None
+    if latest_prediction:
+        created_at = latest_prediction["created_at"]
+        formatted_hour = created_at.strftime("%I:%M %p")  
+        latest_prediction["formatted_hour"] = formatted_hour
+
+        weather = latest_prediction['weather']
+        road = latest_prediction['road_conditions']
+        risk = latest_prediction['risk_label']
+
+        safety_tips = generate_safety_tips(weather, road, risk)
+
+    return render_template(
+        'admin_dashboard.html',
+        total=total,
+        high=high,
+        low=low,
+        latest=latest_prediction,
+        safety_tips=safety_tips
+    )
+
+
+
+
 
 @app.route('/history')
 def history():
@@ -286,7 +395,9 @@ def manage_users():
     cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT id, email, role, status FROM users")
     users = cursor.fetchall()
-    return render_template('manage_users.html', users=users)
+    success = request.args.get('success')  
+    return render_template('manage_users.html', users=users, success=success)
+
 
 @app.route('/users/update/<int:user_id>', methods=['POST'])
 def update_user(user_id):
@@ -306,17 +417,27 @@ def delete_user(user_id):
     db.commit()
     return redirect(url_for('manage_users'))
 
+from werkzeug.security import generate_password_hash
+
 @app.route('/users/add', methods=['POST'])
 def add_user():
+    username = request.form['username']
     email = request.form['email']
     password = request.form['password']
     role = request.form['role']
     status = request.form.get('status', 'active')
+
+    hashed_pw = generate_password_hash(password)
+
     cursor = db.cursor()
-    cursor.execute("INSERT INTO users (email, password, role, status) VALUES (%s, %s, %s, %s)",
-                   (email, password, role, status))
+    cursor.execute("""
+        INSERT INTO users (username, email, password, role, status)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (username, email, hashed_pw, role, status))
     db.commit()
-    return redirect(url_for('manage_users'))
+    return redirect(url_for('manage_users', success='User added successfully'))
+
+
 
 @app.route('/logout')
 def logout():
