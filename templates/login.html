@@ -81,9 +81,6 @@
     </div>
 
     <button class="login-btn" onclick="loginUser()">Login</button>
-    <div class="center-text">
-      <p>Don't have an account? <a href="#" onclick="checkAdminAccess()">Signup</a></p>
-    </div>
   </div>
 
   <script>
@@ -121,30 +118,6 @@
       alert("Server error during login.");
     });
   }
-</script>
-<script>
-  function checkAdminAccess() {
-  const code = prompt("Enter admin access code:");
-  if (code === null) return; 
-  fetch("/verify_admin_code", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include", 
-    body: JSON.stringify({ code: code })
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.allowed) {
-      window.location.href = "/signup";
-    } else {
-      alert("Incorrect access code.");
-    }
-  })
-  .catch(err => {
-    console.error("Admin code verification failed:", err);
-    alert("Server error.");
-  });
-}
 </script>
 
 </body>
