@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Incident Verification</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/verfiy.css') }}">
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="logo-title">
+            <img src="{{ url_for('static', filename='AcciTrack-Logo.png') }}" alt="logo">
+        </div>
+        <a href="/admin_dashboard">Dashboard</a>
+        <a href="/verify" class="active">Verify Incidents</a>  
+        <a href="/monitor">Monitor</a> 
+        <a href="/history">History</a>
+        <a href="/admin_profile">Profile</a>
+        <a href="/users">Manage Users</a>
+        <a href="/logout">Log Out</a>
+    </div>
+    
+    <!-- Main content -->
+    <div class="main">
+        <!-- Header -->
+        <div class="header">
+            <h1>Verify Detected Vehicle Incidents</h1>
+        </div>
+
+        <!-- Incident Cards -->
+        <div class="incident-container">
+            {% for image in images %}
+            <div class="incident-card" id="{{ image }}">
+                <img src="{{ url_for('static', filename='pending_incidents/' ~ image) }}" alt="{{ image }}">
+                <div class="btn-group">
+                    <button class="btn btn-approve" onclick="handleIncident('{{ image }}', 'approve')">Approve</button>
+                    <button class="btn btn-reject" onclick="handleIncident('{{ image }}', 'reject')">Reject</button>
+                </div>
+                <div class="sensor-data" id="sensor-{{ image }}" style="display: none;"></div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+    function handleIncident(filename, action) {
+        const url = `/verify/${action}/${filename}`;
+        
+        fetch(url, {
+            method: "POST"
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === "approved") {
+                const readings = data.data.sensor_data;
+                const sensorBox = document.getElementById(`sensor-${filename}`);
+                sensorBox.style.display = 'block';
+                sensorBox.innerHTML = `
+                    <strong>Sensor Readings:</strong><br>
+                    Temperature: ${readings.temperature} °C<br>
+                    Humidity: ${readings.humidity} %<br>
+                    Gas: ${readings.gas}<br>
+                    Light: ${readings.lux}<br>
+                    Time: ${data.data.approved_at}<br>
+                    Location: ${data.data.location}
+                `;
+            } else if (data.status === "rejected") {
+                document.getElementById(filename).remove();
+            } else {
+                alert("❌ Error: " + data.error);
+            }
+        })
+        .catch(err => {
+            console.error("Fetch error:", err);
+            alert("❌ Network error");
+        });
+    }
+    </script>
+
+</body>
+</html>

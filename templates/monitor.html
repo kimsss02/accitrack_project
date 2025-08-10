@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Monitor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/monitor.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="logo-title">
+        <img src="{{ url_for('static', filename='AcciTrack-Logo.png') }}" alt="logo">
+        </div>
+        <a href="/admin_dashboard">Dashboard</a>
+        <a href="/verify">Verify Incidents</a>  
+        <a href="/monitor">Monitor</a> 
+        <a href="/history">History</a>
+        <a href="/admin_profile">Profile</a>
+        <a href="/users">Manage Users</a>
+        <a href="/logout">Log Out</a>
+    </div>
+    <!-- Navigation Bar -->
+    <div class="navbar">
+        <a href="/" class="active">Monitor Tab</a>
+        <a href="/verify">Verification Tab</a>
+    </div>
+
+    <div class="container">
+        <!-- Left Column: Sensor Readings -->
+        <div class="sensor-graphs">
+            <!-- Temperature -->
+            <div class="sensor-panel">
+                <h3>Temperature</h3>
+                <div class="thermometer-outer">
+                    <div class="thermometer-inner" id="temperatureFill"></div>
+                </div>
+                <div class="info-row">
+                    <span id="temperatureValue" class="digital-value">-- °C</span>
+                    <span id="temperatureStatus" class="status-indicator"></span>
+                </div>
+            </div>
+
+            <!-- Humidity -->
+            <div class="sensor-panel">
+                <h3>Humidity</h3>
+                <div class="humidity-bar">
+                    <div class="humidity-fill" id="humidityFill"></div>
+                </div>
+                <div class="info-row">
+                    <span id="humidityValue" class="digital-value">-- %</span>
+                    <span id="humidityStatus" class="status-indicator"></span>
+                </div>
+            </div>
+
+            <!-- Pressure -->
+            <div class="sensor-panel">
+                <h3>Pressure</h3>
+                <canvas id="pressureChart"></canvas>
+                <div class="info-row">
+                    <span id="pressureValue" class="digital-value">-- hPa</span>
+                    <span id="pressureStatus" class="status-indicator"></span>
+                </div>
+            </div>
+
+            <!-- Gas -->
+            <div class="sensor-panel">
+                <h3>Gas</h3>
+                <div class="gas-bar" id="gasBar"></div>
+                <div class="info-row">
+                    <span id="gasValue" class="digital-value">--</span>
+                    <span id="gasStatus" class="status-indicator"></span>
+                </div>
+            </div>
+
+            <!-- Lux -->
+            <div class="sensor-panel">
+                <h3>Light (Lux)</h3>
+                <div class="lux-gauge">
+                    <div class="gauge-fill" id="luxFill"></div>
+                </div>
+                <div class="info-row">
+                    <span id="luxValue" class="digital-value">-- lx</span>
+                    <span id="luxStatus" class="status-indicator"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Stream + Controls -->
+        <div class="right-column">
+            <div class="video-container" id="video-box">
+                <img id="video-stream" src="" alt="Stream will appear here">
+                <span id="placeholder-text">Stream not started</span>
+            </div>
+
+            <div class="controls">
+                <button onclick="startStream()">Start Stream</button>
+                <button onclick="stopStream()">Stop Stream</button>
+            </div>
+
+            <div class="terminal" id="terminal-log">
+                >> System ready...
+            </div>
+        </div>
+    </div>
+
+    <!-- Toggle Header -->
+    <h3 id="toggleHeader" onclick="toggleCharts()" style="cursor: pointer; user-select: none;text-align: center;">
+    Sensor Readings - Last 24 Hours &#9660;
+    </h3>
+
+    <!-- Collapsible Chart Container -->
+    <div id="bottomCharts" class="bottom-chart hidden">
+        <div class="chart-row">
+            <div class="chart-box">
+                <h4>Temperature (°C)</h4>
+                <canvas id="tempChart" class="sensor-chart"></canvas>
+            </div>
+            <div class="chart-box">
+                <h4>Humidity (%)</h4>
+                <canvas id="humidityChart" class="sensor-chart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-row">
+            <div class="chart-box">
+                <h4>Gas (kΩ)</h4>
+                <canvas id="gasChart" class="sensor-chart"></canvas>
+            </div>
+            <div class="chart-box">
+                <h4>Lux</h4>
+                <canvas id="luxChart" class="sensor-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const streamEl = document.getElementById("video-stream");
+        const placeholderText = document.getElementById("placeholder-text");
+        const terminalEl = document.getElementById("terminal-log");
+
+        function startStream() {
+            streamEl.src = "/video_feed";
+            streamEl.style.display = "block";
+            placeholderText.style.display = "none";
+            logToTerminal(">> Stream started.");
+        }
+
+        function stopStream() {
+            streamEl.src = "";
+            streamEl.style.display = "none";
+            placeholderText.style.display = "block";
+            logToTerminal(">> Stream stopped.");
+        }
+
+        function logToTerminal(message) {
+            terminalEl.textContent += "\n" + message;
+            terminalEl.scrollTop = terminalEl.scrollHeight;
+        }
+    </script>
+    <script>
+    async function checkForIncidents() {
+        try {
+            const response = await fetch('/incident_logs');
+            const data = await response.json();
+            if (data.length > 0) {
+                data.forEach(logToTerminal);  // Print each log
+            }
+        } catch (error) {
+            console.error("Error fetching incident logs:", error);
+        }
+
+        setTimeout(checkForIncidents, 2000); // check again after 2 seconds
+    }
+
+    checkForIncidents(); // Start checking
+    </script>
+
+
+<script>
+    // Helper function to initialize a line chart
+    function createLineChart(ctx, label, borderColor) {
+        return new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: label,
+                    data: [],
+                    borderColor: borderColor,
+                    fill: false,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                scales: {
+                    x: {
+                        display: false
+                    },
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+    const pressureChart = createLineChart(document.getElementById('pressureChart'), 'Pressure (hPa)', 'orange');
+
+    function addData(chart, value) {
+        const maxPoints = 20;
+        const now = new Date().toLocaleTimeString();
+        chart.data.labels.push(now);
+        chart.data.datasets[0].data.push(value);
+
+        if (chart.data.labels.length > maxPoints) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+        }
+
+        chart.update();
+    }
+
+    function updateIndicator(value, elementId, thresholds) {
+    const el = document.getElementById(elementId);
+    if (value < thresholds.safe) {
+        el.style.backgroundColor = "green";
+    } else if (value < thresholds.warning) {
+        el.style.backgroundColor = "orange";
+    } else {
+        el.style.backgroundColor = "red";
+    }
+    }
+
+
+    function updateSensorReadings() {
+    fetch('/sensor-readings')
+        .then(response => response.json())
+        .then(data => {
+            if (!data.error) {
+                // ✅ Pressure chart only
+                addData(pressureChart, data.pressure);
+
+                // ✅ Update digital values
+                document.getElementById('temperatureValue').textContent = `${data.temperature} °C`;
+                document.getElementById('humidityValue').textContent = `${data.humidity} %`;
+                document.getElementById('pressureValue').textContent = `${data.pressure} hPa`;
+                document.getElementById('gasValue').textContent = `${data.gas}`;
+                document.getElementById('luxValue').textContent = `${data.lux} lx`;
+
+                // ✅ Update visual elements
+                document.getElementById('temperatureFill').style.height = `${Math.min(data.temperature, 100)}%`;
+                document.getElementById('humidityFill').style.width = `${Math.min(data.humidity, 100)}%`;
+                document.getElementById('gasBar').style.backgroundColor = data.gas > 30000 ? 'red' : data.gas > 10000 ? 'orange' : 'green';
+
+                const luxDegree = Math.min(data.lux / 1000 * 360, 360);
+                document.querySelector('.lux-gauge').style.background = `conic-gradient(gold ${luxDegree}deg, #eee ${luxDegree}deg)`;
+
+                // ✅ Status indicator lights
+                updateIndicator(data.temperature, "temperatureStatus", { safe: 30, warning: 40 });
+                updateIndicator(data.humidity, "humidityStatus", { safe: 50, warning: 70 });
+                updateIndicator(data.pressure, "pressureStatus", { safe: 1000, warning: 1020 });
+                updateIndicator(data.gas, "gasStatus", { safe: 10000, warning: 30000 });
+                updateIndicator(data.lux, "luxStatus", { safe: 300, warning: 800 });
+            }
+        })
+        .catch(err => console.error("Sensor fetch error:", err));
+}
+
+    setInterval(updateSensorReadings, 2000); // Update every 2 seconds
+</script>
+
+<script>
+
+    function toggleCharts() {
+        const charts = document.getElementById("bottomCharts");
+        const toggleHeader = document.getElementById("toggleHeader");
+
+        charts.classList.toggle("hidden");
+
+        // Flip arrow ▼/▲
+        if (toggleHeader.innerHTML.includes("▼")) {
+            toggleHeader.innerHTML = "Sensor Readings - Last 24 Hours &#9650;";
+        } else {
+            toggleHeader.innerHTML = "Sensor Readings - Last 24 Hours &#9660;";
+        }
+    }
+
+    const tempCtx = document.getElementById('tempChart').getContext('2d');
+    const humidityCtx = document.getElementById('humidityChart').getContext('2d');
+    const gasCtx = document.getElementById('gasChart').getContext('2d');
+    const luxCtx = document.getElementById('luxChart').getContext('2d');
+
+    const tempChart = new Chart(tempCtx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'Temperature (°C)', data: [], borderColor: 'red', tension: 0.3 }] },
+        options: getOptions("Time", "°C")
+    });
+
+    const humidityChart = new Chart(humidityCtx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'Humidity (%)', data: [], borderColor: 'blue', tension: 0.3 }] },
+        options: getOptions("Time", "%")
+    });
+
+    const gasChart = new Chart(gasCtx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'Gas (kΩ)', data: [], borderColor: 'green', tension: 0.3 }] },
+        options: getOptions("Time", "kΩ")
+    });
+
+    const luxChart = new Chart(luxCtx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'Lux', data: [], borderColor: 'orange', tension: 0.3 }] },
+        options: getOptions("Time", "Lux")
+    });
+
+    function getOptions(xLabel, yLabel) {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: { title: { display: true, text: xLabel } },
+                y: { title: { display: true, text: yLabel }, beginAtZero: true }
+            }
+        };
+    }
+
+    async function fetch24HourSensorData() {
+        try {
+            const response = await fetch('/sensor-history');
+            const history = await response.json();
+
+            const labels = history.map(entry => 
+                new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            );
+
+            tempChart.data.labels = labels;
+            tempChart.data.datasets[0].data = history.map(e => e.temperature);
+
+            humidityChart.data.labels = labels;
+            humidityChart.data.datasets[0].data = history.map(e => e.humidity);
+
+            gasChart.data.labels = labels;
+            gasChart.data.datasets[0].data = history.map(e => e.gas);
+
+            luxChart.data.labels = labels;
+            luxChart.data.datasets[0].data = history.map(e => e.lux);
+
+            tempChart.update();
+            humidityChart.update();
+            gasChart.update();
+            luxChart.update();
+        } catch (err) {
+            console.error("Failed to load 24h sensor data:", err);
+        }
+    }
+
+    // Load once on page load
+    fetch24HourSensorData();
+
+    // Optionally refresh every 5 minutes
+    setInterval(fetch24HourSensorData, 5 * 60 * 1000);
+</script>
+
+</body>
+</html>
