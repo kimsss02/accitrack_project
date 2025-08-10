@@ -3,8 +3,15 @@ from flask import Flask, render_template, request, redirect, jsonify, session, u
 from werkzeug.security import check_password_hash, generate_password_hash
 import mysql.connector
 from flask_cors import CORS
+from routes import register_routes
 
-from datetime import datetime
+from inference_worker import start_pipeline 
+from threading import Thread
+
+
+app = Flask(__name__)
+
+register_routes(app)
 
 def generate_safety_tips(weather, road, risk_label):
     tips = []
@@ -30,27 +37,33 @@ def generate_safety_tips(weather, road, risk_label):
         tips.append("💧 Damp roads may still be slippery. Drive with caution.")
     elif road == "dry":
         tips.append("🛣️ Dry road. Good traction, but remain within speed limits.")
-
     return " ".join(tips)
 
 
-
-app = Flask(__name__)
 CORS(app, supports_credentials=True)
 app.secret_key = "accitrack_2025_secret_key_for_sessions"
 
-# Load trained model and encoders
+def run_detection_pipeline():
+    try:
+        print("🚦 Starting detection pipeline...")
+        start_pipeline()
+    except Exception as e:
+        print(f"Detection pipeline error: {e}")
+
+Thread(target=run_detection_pipeline, daemon=True).start()
+
+# Load the trained model and encoders
 model = joblib.load("accident_prediction_model.pkl")
 weather_encoder = joblib.load("weather_encoder.pkl")
 road_encoder = joblib.load("road_conditions_encoder.pkl")
 location_encoder = joblib.load("location_encoder.pkl")
 time_encoder = joblib.load("time_encoder.pkl")
 
-# DB connection
+#---------------- DBASE CONNECTION -------------
 db = mysql.connector.connect(
     host="localhost",
     user="root",
-    password="",
+    password="08f_lala",
     database="acci_track",
     ssl_disabled=True,  
     autocommit=True
@@ -79,14 +92,14 @@ def signup_submit():
         password = data.get('password')
         access_code = data.get('access_code', '').strip()
 
-        # Basic validation
+        # validation
         if not all([username, email, password, access_code]):
             return jsonify({'error': 'All fields are required.'}), 400
 
         if access_code != "Admin2025":
             return jsonify({'error': 'Invalid admin access code'}), 403
 
-        # Check for existing email
+        # existing email
         cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
         if cursor.fetchone():
             return jsonify({'error': 'Email already exists'}), 409
@@ -143,7 +156,7 @@ def predict():
         confidence = float(prob)                         
         risk_label = "High Risk" if confidence >= 0.5 else "Low Risk"
 
-        # Save prediction result to DB
+        # Save prediction result to Dbase
         cursor.execute("""
             INSERT INTO prediction_results 
             (weather, road_conditions, location, hour, day_of_week, victim_unharmed, prediction, confidence, risk_label)
@@ -161,7 +174,7 @@ def predict():
         ))
         db.commit()
 
-        # Get coordinates from `locations` table (fix column name match)
+        # This part is to coordinates from locations table 
         cursor.execute("""
             SELECT latitude, longitude
             FROM locations
@@ -185,19 +198,20 @@ def predict():
 # ---------------- LOCATION API ----------------
 @app.route('/location_stats')
 def location_stats():
-    cursor.execute("SELECT `Barangay/Location`, COUNT(*) as total FROM combined GROUP BY `Barangay/Location`")
-    return jsonify(cursor.fetchall())
+    local_cursor = db.cursor(dictionary=True)
+    local_cursor.execute("SELECT DISTINCT Barangay_Location FROM combined ORDER BY Barangay_Location")
+    result = local_cursor.fetchall()
+    local_cursor.close()
+    return jsonify(result)
 
 @app.route('/api/locations')
 def api_locations():
     cursor = db.cursor(dictionary=True) 
-    cursor.execute("SELECT DISTINCT `Barangay/Location` FROM combined ORDER BY `Barangay/Location`")
+    cursor.execute("SELECT DISTINCT Barangay_Location FROM combined ORDER BY Barangay_Location;")
     results = cursor.fetchall()
     cursor.close() 
-    return jsonify([row['Barangay/Location'] for row in results])
+    return jsonify([row['Barangay_Location'] for row in results])
 
-
-# returns all known locations + their coords
 @app.route('/api/location-coords')
 def api_location_coords():
     cursor = db.cursor(dictionary=True)
@@ -206,27 +220,39 @@ def api_location_coords():
     cursor.close()
     return jsonify(rows)
 
-
 @app.route('/api/heatmap-data')
 def heatmap_data():
     cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT location_name, latitude, longitude FROM locations WHERE latitude IS NOT NULL AND longitude IS NOT NULL")
+    cursor.execute("""
+        SELECT 
+            l.location_name,
+            l.latitude,
+            l.longitude,
+            COALESCE(
+                CASE 
+                    WHEN COUNT(p.id) = 0 THEN 'Unknown'
+                    WHEN SUM(p.risk_label = 'High Risk') / COUNT(p.id) >= 0.5 THEN 'High'
+                    ELSE 'Low'
+                END, 'Unknown'
+            ) AS risk_level
+        FROM locations l
+        LEFT JOIN prediction_results p ON l.location_name = p.location
+        WHERE l.latitude IS NOT NULL AND l.longitude IS NOT NULL
+        GROUP BY l.location_name, l.latitude, l.longitude
+    """)
     data = cursor.fetchall()
     cursor.close()
     return jsonify(data)
-
-
 
 # ---------------- DASHBOARDS ----------------
 @app.route('/')
 def login_page():
     return render_template('login.html')
 
-
 @app.route('/user_dashboard')
 def user_dashboard():
-    if session.get('role') != 'user':
-        return "Access denied", 403
+    if 'user_id' not in session or session.get('role') != 'user':
+        return redirect('/')
 
     cursor.execute("SELECT COUNT(*) AS total FROM prediction_results")
     total = cursor.fetchone()['total']
@@ -242,7 +268,7 @@ def user_dashboard():
     user = cursor.fetchone()
     username = user['email'] if user else 'User'
 
-     # Get latest prediction made today
+     # latest prediction made today
     cursor.execute("""
         SELECT weather, road_conditions, location, hour, confidence, risk_label, created_at
         FROM prediction_results
@@ -256,16 +282,15 @@ def user_dashboard():
     if latest_prediction:
         created_at = latest_prediction["created_at"]
         
-        # Format hour as 12-hour time with AM/PM
+        # time format
         formatted_hour = created_at.strftime("%I:%M %p")  
 
         latest_prediction["formatted_hour"] = formatted_hour
-
         weather = latest_prediction['weather']
         road = latest_prediction['road_conditions']
         risk = latest_prediction['risk_label']
-
         safety_tips = generate_safety_tips(weather, road, risk)
+
     return render_template(
         'user_dashboard.html',
         total=total,
@@ -276,11 +301,11 @@ def user_dashboard():
         safety_tips=safety_tips
     )
 
-
+# admin
 @app.route('/admin_dashboard')
 def admin_dashboard():
-    if session.get('role') != 'admin':
-        return "Access denied", 403
+    if 'user_id' not in session or session.get('role') != 'admin':
+        return redirect('/')
 
     cursor.execute("SELECT COUNT(*) AS total FROM prediction_results")
     total = cursor.fetchone()['total']
@@ -291,7 +316,7 @@ def admin_dashboard():
     cursor.execute("SELECT COUNT(*) AS low FROM prediction_results WHERE risk_label = 'Low Risk'")
     low = cursor.fetchone()['low']
 
-    # Get today's latest prediction with day_of_week
+    # latest prediction 
     cursor.execute("""
         SELECT weather, road_conditions, location, hour, confidence, risk_label, created_at
         FROM prediction_results
@@ -310,7 +335,6 @@ def admin_dashboard():
         weather = latest_prediction['weather']
         road = latest_prediction['road_conditions']
         risk = latest_prediction['risk_label']
-
         safety_tips = generate_safety_tips(weather, road, risk)
 
     return render_template(
@@ -322,14 +346,12 @@ def admin_dashboard():
         safety_tips=safety_tips
     )
 
-
-
-
-
+# admin_history 
 @app.route('/history')
 def history():
-    if session.get('role') != 'admin':
-        return "Access denied", 403
+    if 'user_id' not in session or session.get('role') != 'admin':
+        return redirect('/')
+
 
     cursor.execute("""
         SELECT id, weather, road_conditions, location, hour, day_of_week, victim_unharmed, prediction, confidence, risk_label, created_at
@@ -337,9 +359,9 @@ def history():
         ORDER BY created_at DESC
     """)
     history_data = cursor.fetchall()
-
     return render_template('history.html', history=history_data)
 
+# admin_profile
 @app.route('/admin_profile', methods=['GET', 'POST'])
 def admin_profile():
     if 'user_id' not in session or session.get('role') != 'admin':
@@ -356,7 +378,6 @@ def admin_profile():
             cursor.execute("UPDATE users SET email = %s, password = %s WHERE id = %s", (new_email, hashed_pw, admin_id))
         else:
             cursor.execute("UPDATE users SET email = %s WHERE id = %s", (new_email, admin_id))
-
         db.commit()
         return redirect('/admin_profile')
 
@@ -364,7 +385,33 @@ def admin_profile():
     admin = cursor.fetchone()
     return render_template('admin_profile.html', email=admin['email'])
 
+@app.route('/monitor')
+def monitor_page():
+    if 'user_id' not in session:
+        return redirect('/')
+    return render_template('monitor.html')
 
+@app.route('/verify')
+def verify_page():
+    if 'user_id' not in session:
+        return redirect('/')
+    return render_template('verify.html')
+
+# user_history
+@app.route('/user_history')
+def user_history():
+    if 'user_id' not in session or session['role'] != 'user':
+        return redirect('/login')
+
+    cursor.execute("""
+        SELECT id, weather, road_conditions, location, hour, day_of_week, victim_unharmed, prediction, confidence, risk_label, created_at
+        FROM prediction_results
+        ORDER BY created_at DESC
+    """)
+    history_data = cursor.fetchall()
+    return render_template('user_history.html', history=history_data)
+
+#user_profile
 @app.route('/profile', methods=['GET', 'POST'])
 def user_profile():
     if 'user_id' not in session or session.get('role') != 'user':
@@ -381,7 +428,6 @@ def user_profile():
             cursor.execute("UPDATE users SET email = %s, password = %s WHERE id = %s", (new_email, hashed_pw, user_id))
         else:
             cursor.execute("UPDATE users SET email = %s WHERE id = %s", (new_email, user_id))
-
         db.commit()
         return redirect('/profile')
 
@@ -397,7 +443,6 @@ def manage_users():
     users = cursor.fetchall()
     success = request.args.get('success')  
     return render_template('manage_users.html', users=users, success=success)
-
 
 @app.route('/users/update/<int:user_id>', methods=['POST'])
 def update_user(user_id):
@@ -418,7 +463,6 @@ def delete_user(user_id):
     return redirect(url_for('manage_users'))
 
 from werkzeug.security import generate_password_hash
-
 @app.route('/users/add', methods=['POST'])
 def add_user():
     username = request.form['username']
@@ -436,8 +480,6 @@ def add_user():
     """, (username, email, hashed_pw, role, status))
     db.commit()
     return redirect(url_for('manage_users', success='User added successfully'))
-
-
 
 @app.route('/logout')
 def logout():
