@@ -1,0 +1,60 @@
+body {
+      margin: 0;
+      font-family: 'Poppins', sans-serif;
+      background: url('map-bg.png') no-repeat center center fixed;
+      background-size: cover;
+    }
+    .container {
+      max-width: 350px;
+      margin: 5% auto;
+      background: white;
+      padding: 2rem;
+      border-radius: 1rem;
+      text-align: center;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .logo {
+      width: 250px;
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      color: #082f84;
+      margin-bottom: 1.5rem;
+    }
+    .p {
+      font-size: 0.2rem;
+    }
+    input[type="email"], input[type="password"] {
+      width: 100%;
+      padding: 0.6rem;
+      margin: 0.5rem 0;
+      border-radius: 0.5rem;
+      border: 1px solid #ccc;
+    }
+    .actions {
+      justify-content: space-between;
+      font-size: 0.8rem;
+      margin-bottom: 1rem;
+      text-align: right;
+    }
+    button {
+      width: 100%;
+      padding: 0.7rem;
+      border: none;
+      border-radius: 2rem;
+      font-weight: bold;
+      color: white;
+      margin-top: 0.5rem;
+      cursor: pointer;
+    }
+    .login-btn {
+      background-color: #1E3A8A;
+    }
+    .create-btn {
+      background-color: #1E3A8A;
+    }
+    .center-text {
+      text-align: center;
+      font-size: 0.8rem;
+    }

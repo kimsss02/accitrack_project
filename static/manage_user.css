@@ -1,0 +1,83 @@
+body {
+      font-family: 'Poppins', sans-serif;
+      margin: 0;
+      display: flex;
+      background: #f4f7fc;
+    }
+    .sidebar {
+      width: 260px;
+      background: #d8e3f7;
+      padding: 20px;
+    }
+    .sidebar a {
+      display: block;
+      color: #1a2e79;
+      text-decoration: none;
+      margin: 15px 0;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .sidebar a:hover {
+      background: #1E3A8A;
+      color: white;
+    }
+    .main {
+      flex: 1;
+      padding: 20px;
+    }
+    .header {
+      background: #ffffff;
+      padding: 15px 30px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .header h1 {
+      font-size: 24px;
+      color: #333;
+    }
+    .table-container {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #e6effc;
+    }
+    input, select {
+      padding: 6px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #1E3A8A;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #162c5d;
+    }
+    .add-user-form input, .add-user-form select {
+      margin: 5px 0;
+    }
+    .logo-title {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .logo-title img {
+      width: 100px;
+    }
